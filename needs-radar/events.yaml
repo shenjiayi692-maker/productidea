@@ -1,0 +1,74 @@
+# 信号线 3：可预测周期事件日历（美国市场为主）
+# lead_weeks = 提前几周开始在日报里提醒备货
+events:
+  - name: FAFSA 开放申请（学贷/助学金工具窗口）
+    month: 10
+    day: 1
+    lead_weeks: 4
+    ideas: SAI 计算器、FAFSA 步骤指南、助学金对比
+
+  - name: 大学 ED/EA 申请截止潮
+    month: 11
+    day: 1
+    lead_weeks: 4
+    ideas: 申请清单工具、文书字数/格式检查器
+
+  - name: 美国报税季开始
+    month: 1
+    day: 27
+    lead_weeks: 3
+    ideas: 退税估算器、1099 自由职业税计算器
+
+  - name: 报税截止日
+    month: 4
+    day: 15
+    lead_weeks: 4
+    ideas: 延期申请指南、最后一刻检查清单
+
+  - name: 大学放榜季（Ivy Day 前后）
+    month: 3
+    day: 28
+    lead_weeks: 3
+    ideas: offer 对比计算器（学费+奖学金净价）、waitlist 策略
+
+  - name: 毕业与搬家旺季开始
+    month: 5
+    day: 15
+    lead_weeks: 4
+    ideas: 搬家清单、押金追讨信生成器、室友费用分摊
+
+  - name: 租房换约高峰（8-9 月）
+    month: 8
+    day: 1
+    lead_weeks: 4
+    ideas: 租金涨幅合法性查询、续约谈判信模板
+
+  - name: 返校季
+    month: 8
+    day: 15
+    lead_weeks: 4
+    ideas: 教材比价、宿舍用品清单
+
+  - name: 医保 Open Enrollment
+    month: 11
+    day: 1
+    lead_weeks: 3
+    ideas: 保险计划对比器
+
+  - name: 黑五网一
+    month: 11
+    day: 27
+    lead_weeks: 4
+    ideas: 折扣真伪历史价查询、清单工具
+
+  - name: 情人节（情感类流量峰值）
+    month: 2
+    day: 14
+    lead_weeks: 3
+    ideas: 关系测试、道歉信生成器、约会点子
+
+  - name: 结婚旺季订婚潮（感恩节-元旦订婚，1 月开始策划）
+    month: 1
+    day: 5
+    lead_weeks: 2
+    ideas: 婚礼预算分配器、宾客名单工具

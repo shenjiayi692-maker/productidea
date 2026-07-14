@@ -1,0 +1,74 @@
+# ============ 需求雷达配置 ============
+
+email:
+  to: shenjiayi692@gmail.com
+  from: "Needs Radar <onboarding@resend.dev>"   # 验证自有域名后可改
+  subject_prefix: "🎯 需求雷达日报"
+
+llm:
+  model: claude-sonnet-5
+  extract_batch_size: 20      # 每次 LLM 调用处理的候选数
+  max_candidates: 120         # 每天最多送入 LLM 的候选数（控制成本）
+  top_n: 10                   # 日报条数
+
+# ---- 信号线 1：定向 subreddit（垂直领域）----
+subreddits:
+  许愿池:
+    - SomebodyMakeThis
+    - SideProject
+    - Entrepreneur
+  学贷与大学申请:
+    - StudentLoans
+    - ApplyingToCollege
+    - financialaid
+  房东与地产投资:
+    - realestateinvesting
+    - Landlord
+  搬家与租房:
+    - renting
+    - moving
+  怀孕育儿:
+    - BabyBumps
+    - NewParents
+    - beyondthebump
+    - namenerds
+  情感关系:
+    - relationship_advice
+    - AmItheAsshole
+  移民签证:
+    - immigration
+    - USCIS
+  汽车买卖养护:
+    - askcarsales
+    - MechanicAdvice
+  旅行规划:
+    - travel
+    - solotravel
+  老年照护:
+    - AgingParents
+    - CaregiverSupport
+
+# ---- 信号线 1b：全站关键词搜索（挖需求最高信噪比句式）----
+search_queries:
+  - '"is there a tool that"'
+  - '"is there an app that"'
+  - '"why is there no"'
+  - '"i wish there was a"'
+  - '"does anyone know a website"'
+
+# ---- 信号线 2：即时事件 ----
+google_trends_geo: US
+hackernews_types: [front_page, ask_hn]
+
+# ---- v0.2：竞品核查（Serper.dev 或 SerpAPI；两个 key 都没配则自动跳过）----
+competitor_check:
+  queries_per_card: 2         # 每张卡最多搜几个词
+  max_searches_per_day: 40    # Serper 送 2500 次，40/天约可跑 2 个月；若退回 SerpAPI 免费档(100次/月)调成 3
+
+# ---- 粗筛阈值 ----
+filters:
+  reddit_min_ups: 15          # 赞数或评论数满足其一即入围
+  reddit_min_comments: 10
+  search_min_ups: 3           # 关键词搜索线阈值放宽（句式本身就是强信号）
+  hn_min_points: 50
+  max_age_hours: 36
