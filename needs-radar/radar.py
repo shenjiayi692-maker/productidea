@@ -9,6 +9,7 @@
 """
 
 import argparse
+import html
 import json
 import os
 import re
@@ -88,36 +89,114 @@ def reddit_get(path, **kw):
 
 # ---------------------------------------------------------------- 信号线 1+2：抓取
 
+ATOM = {"a": "http://www.w3.org/2005/Atom"}
+
+
+def _strip_html(s):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
+
+
+def _sub_from_url(url):
+    m = re.search(r"reddit\.com/r/([^/]+)/", url)
+    return m.group(1) if m else "reddit"
+
+
+def _fetch_rss(url, tries=4):
+    """Reddit RSS 突发限流较严，429 时退避重试。"""
+    for i in range(tries):
+        try:
+            return get(url).text
+        except requests.HTTPError as e:
+            if getattr(e.response, "status_code", None) == 429 and i < tries - 1:
+                time.sleep(8 * (i + 1))
+                continue
+            raise
+
+
+def _parse_reddit_rss(xml_text, line, vertical):
+    out = []
+    for e in ET.fromstring(xml_text).findall("a:entry", ATOM):
+        link_el = e.find("a:link", ATOM)
+        url = link_el.get("href") if link_el is not None else ""
+        atom_id = e.findtext("a:id", "", ATOM)            # 形如 t3_1v3dvsd
+        rid = atom_id.split("_")[-1] if atom_id else None
+        if not rid:
+            m = re.search(r"/comments/(\w+)/", url)
+            rid = m.group(1) if m else url
+        cat = e.find("a:category", ATOM)
+        sub = ((cat.get("label", "") or cat.get("term", "")) if cat is not None else "").removeprefix("r/")
+        pub = e.findtext("a:published", "", ATOM) or e.findtext("a:updated", "", ATOM)
+        try:
+            created = datetime.fromisoformat(pub.replace("Z", "+00:00")).timestamp() if pub else 0
+        except ValueError:
+            created = 0
+        out.append({
+            "id": f"reddit:{rid}", "source": "reddit", "line": line, "vertical": vertical,
+            "title": (e.findtext("a:title", "", ATOM) or "").strip(),
+            "text": _strip_html(e.findtext("a:content", "", ATOM))[:800],
+            "url": url, "sub": sub or _sub_from_url(url),
+            "ups": 0, "comments": 0, "created": created, "pre_ranked": True,
+        })
+    return out
+
+
 def fetch_subreddits(cfg):
+    """有 Reddit OAuth 凭据走 .json（带赞数），否则走免登录 .rss（top/day 本身即质量门槛）。"""
     out = []
     for vertical, subs in cfg["subreddits"].items():
         multi = "+".join(subs)
         try:
-            j = reddit_get(f"/r/{multi}/top.json?t=day&limit=60&raw_json=1").json()
+            if os.environ.get("REDDIT_CLIENT_ID"):
+                j = reddit_get(f"/r/{multi}/top.json?t=day&limit=60&raw_json=1").json()
+                out += [reddit_item(c["data"], "vertical", vertical)
+                        for c in j.get("data", {}).get("children", [])]
+            else:
+                xml_text = _fetch_rss(f"https://www.reddit.com/r/{multi}/top.rss?t=day")
+                out += _parse_reddit_rss(xml_text, "vertical", vertical)
         except Exception as e:
             print(f"[warn] subreddit {vertical}: {e}", file=sys.stderr)
-            continue
-        for c in j.get("data", {}).get("children", []):
-            d = c["data"]
-            out.append(reddit_item(d, line="vertical", vertical=vertical))
-        time.sleep(1)  # 尊重速率限制
+        time.sleep(3)  # 尊重速率限制
     return out
 
 
 def fetch_searches(cfg):
-    out = []
+    """有 Reddit 凭据走站内 search.json；否则用搜索 API 查 site:reddit.com '句式'（无凭据也能跑）。"""
+    if os.environ.get("REDDIT_CLIENT_ID"):
+        out = []
+        for q in cfg["search_queries"]:
+            try:
+                j = reddit_get(
+                    "/search.json",
+                    params={"q": q, "sort": "new", "t": "day", "limit": 25, "raw_json": 1},
+                ).json()
+                out += [reddit_item(c["data"], "search", f"搜索:{q}")
+                        for c in j.get("data", {}).get("children", [])]
+            except Exception as e:
+                print(f"[warn] search {q}: {e}", file=sys.stderr)
+            time.sleep(1)
+        return out
+    if not (os.environ.get("SERPER_API_KEY") or os.environ.get("SERPAPI_API_KEY")):
+        print("[info] 无 Reddit 凭据且无搜索 key，跳过关键词搜索线", file=sys.stderr)
+        return []
+    out, seen_ids = [], set()
     for q in cfg["search_queries"]:
         try:
-            j = reddit_get(
-                "/search.json",
-                params={"q": q, "sort": "new", "t": "day", "limit": 25, "raw_json": 1},
-            ).json()
+            hits = web_search(f"site:reddit.com {q}", tbs="qdr:w")
         except Exception as e:
             print(f"[warn] search {q}: {e}", file=sys.stderr)
             continue
-        for c in j.get("data", {}).get("children", []):
-            d = c["data"]
-            out.append(reddit_item(d, line="search", vertical=f"搜索:{q}"))
+        for h in hits:
+            m = re.search(r"/comments/(\w+)/", h["url"])
+            if not m or m.group(1) in seen_ids:
+                continue
+            seen_ids.add(m.group(1))
+            out.append({
+                "id": f"reddit:{m.group(1)}", "source": "reddit", "line": "search",
+                "vertical": f"搜索:{q}", "title": h.get("title", ""),
+                "text": (h.get("snippet") or "")[:800], "url": h["url"],
+                "sub": _sub_from_url(h["url"]),
+                "ups": 0, "comments": 0, "created": 0, "pre_ranked": True,
+            })
         time.sleep(1)
     return out
 
@@ -204,7 +283,8 @@ def coarse_filter(items, cfg, db):
             continue
         if not is_new(db, it["id"]):
             continue
-        if it["source"] == "reddit":
+        if it["source"] == "reddit" and not it.get("pre_ranked"):
+            # pre_ranked = 来自 top/day RSS 或句式搜索命中，本身即质量门槛，无赞数可筛
             th_ups = f["search_min_ups"] if it["line"] == "search" else f["reddit_min_ups"]
             if it["ups"] < th_ups and it["comments"] < f["reddit_min_comments"]:
                 continue
@@ -313,27 +393,29 @@ BIG_SITES = ("google.com", "microsoft.com", "apple.com", "adobe.com", "canva.com
              "zillow.com", "nerdwallet.com", "bankrate.com", "smartasset.com", "turbotax.intuit.com")
 
 
-def web_search(query):
-    """搜索抽象：配了 SERPER_API_KEY 走 Serper.dev（送2500次），否则 SERPAPI_API_KEY 走 SerpAPI（免费100次/月）。"""
+def web_search(query, tbs=None):
+    """搜索抽象：配了 SERPER_API_KEY 走 Serper.dev（送2500次），否则 SERPAPI_API_KEY 走 SerpAPI（免费100次/月）。
+    tbs: 时间过滤（如 'qdr:w' 近一周）。返回 [{title, url, snippet}]。"""
     if os.environ.get("SERPER_API_KEY"):
+        payload = {"q": query, "num": 10}
+        if tbs:
+            payload["tbs"] = tbs
         r = requests.post(
             "https://google.serper.dev/search",
             headers={"X-API-KEY": os.environ["SERPER_API_KEY"],
                      "Content-Type": "application/json"},
-            json={"q": query, "num": 10},
+            json=payload,
             timeout=20,
         )
         r.raise_for_status()
-        return [{"title": w.get("title", ""), "url": w.get("link", "")}
+        return [{"title": w.get("title", ""), "url": w.get("link", ""), "snippet": w.get("snippet", "")}
                 for w in r.json().get("organic", [])]
-    r = requests.get(
-        "https://serpapi.com/search.json",
-        params={"engine": "google", "q": query, "num": 10,
-                "api_key": os.environ["SERPAPI_API_KEY"]},
-        timeout=30,
-    )
+    params = {"engine": "google", "q": query, "num": 10, "api_key": os.environ["SERPAPI_API_KEY"]}
+    if tbs:
+        params["tbs"] = tbs
+    r = requests.get("https://serpapi.com/search.json", params=params, timeout=30)
     r.raise_for_status()
-    return [{"title": w.get("title", ""), "url": w.get("link", "")}
+    return [{"title": w.get("title", ""), "url": w.get("link", ""), "snippet": w.get("snippet", "")}
             for w in r.json().get("organic_results", [])]
 
 
@@ -450,10 +532,15 @@ def render_report(cfg, top_cards, events, n_raw, n_filtered):
         it = c["item"]
         s = c["scores"]
         ev = c.get("evidence", "")[:200]
+        if it["ups"] or it["comments"]:
+            meta = f"{it['ups']} 赞 / {it['comments']} 评"
+        else:
+            meta = "句式命中" if it["line"] == "search" else "当日热帖"
+        src = it["sub"] if it["source"] == "reddit" else it["source"]
         L += [
             f"### {i}. {c['pain']}",
             f"- **谁在痛**：{c['who']}　**窗口**：{c.get('window', '?')}",
-            f"- **证据**：r/{it['sub']}（{it['ups']} 赞 / {it['comments']} 评）"
+            f"- **证据**：r/{src}（{meta}）"
             f"：\"{ev}\" — [原帖]({it['url']})",
             f"- **现状**：{c.get('existing', '')}",
             f"- **可做**：{c['site_idea']}",
