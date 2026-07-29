@@ -1,5 +1,8 @@
 # ============ 需求雷达配置 ============
 
+# 日报里 👍/👎 反馈链接指向的私有仓库（留空则不显示反馈行）
+feedback_repo: shenjiayi692-maker/productidea
+
 email:
   to: shenjiayi692@gmail.com
   from: "Needs Radar <onboarding@resend.dev>"   # 验证自有域名后可改

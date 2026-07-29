@@ -42,6 +42,13 @@ def db_connect():
     data_dir.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(data_dir / "seen.db")
     db.execute("CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY, first_seen TEXT)")
+    # v0.2：历次卡片留档，用于历史频率检查 + 日后 join 👍/👎 反馈做调优
+    db.execute("""CREATE TABLE IF NOT EXISTS pains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT, item_id TEXT, pain TEXT, who TEXT, site_idea TEXT, window TEXT,
+        keywords TEXT, buildable INT, monetize INT, gap INT, total INT,
+        tool_count INT, url TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_pains_date ON pains(date)")
     return db
 
 
@@ -514,6 +521,76 @@ def upcoming_events(cfg, today=None):
     return hits
 
 
+# ---------------------------------------------------------------- v0.2：历史频率
+
+STOPWORDS = set("的 了 和 与 在 是 为 不 有 无 也 都 或 而 及 等 个 中 上 下 到 从 对 把 被 让 使 能 会 要 就 还 更 很 太 最 一个 一种 一些 如何 怎么 什么 哪些 没有 难以 缺乏 无法 不知道 找不到 用户 网站 工具 平台 服务 需求 问题 方式 情况 相关 进行 提供 需要 可以 通过 由于 导致 但是 因为 所以 自己 他们 我们".split())
+
+
+def pain_keywords(card, n=6):
+    """从痛点+建议里抽中文关键词做相似度比对（无分词库，按 2-4 字滑窗取高频片段）。"""
+    text = f"{card.get('pain', '')} {card.get('site_idea', '')} {card.get('who', '')}"
+    zh = re.findall(r"[一-鿿]{2,}", text)
+    en = [w.lower() for w in re.findall(r"[A-Za-z]{3,}", text)]
+    grams = {}
+    for seg in zh:
+        for size in (3, 2):
+            for i in range(len(seg) - size + 1):
+                g = seg[i : i + size]
+                if g not in STOPWORDS:
+                    grams[g] = grams.get(g, 0) + (2 if size == 3 else 1)
+    for w in en:
+        if w not in ("the", "and", "for", "with"):
+            grams[w] = grams.get(w, 0) + 2
+    return sorted(grams, key=lambda g: -grams[g])[:n]
+
+
+def check_recurrence(db, card, days=90):
+    """返回 (出现次数, 上次日期)；靠关键词重合度判定同一痛点。"""
+    kws = set(card.get("_keywords", []))
+    if not kws:
+        return 1, None
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    hits = []
+    for date, kw_str in db.execute(
+        "SELECT date, keywords FROM pains WHERE date >= ? ORDER BY date DESC", (cutoff,)
+    ):
+        old = set((kw_str or "").split(","))
+        if old and len(kws & old) / min(len(kws), len(old)) >= 0.5:
+            hits.append(date)
+    return len(hits) + 1, (hits[0] if hits else None)
+
+
+def record_pains(db, cards):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for c in cards:
+        s = c.get("scores", {})
+        db.execute(
+            "INSERT INTO pains (date, item_id, pain, who, site_idea, window, keywords,"
+            " buildable, monetize, gap, total, tool_count, url)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (today, c["item"]["id"], c.get("pain", ""), c.get("who", ""), c.get("site_idea", ""),
+             c.get("window", ""), ",".join(c.get("_keywords", [])),
+             s.get("buildable"), s.get("monetize"), s.get("gap"), c.get("total"),
+             (c.get("scan") or {}).get("tool_count"), c["item"]["url"]),
+        )
+    db.commit()
+
+
+def feedback_links(cfg, card, rank):
+    """👍/👎 = 预填的 GitHub Issue 链接，点开即提交，数据落在私有仓库 issues。"""
+    repo = cfg.get("feedback_repo")
+    if not repo:
+        return ""
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    title = requests.utils.quote(f"[{date}] #{rank} {card.get('pain', '')[:50]}")
+    body = requests.utils.quote(
+        f"卡片：{card.get('pain', '')}\n建议：{card.get('site_idea', '')}\n"
+        f"原帖：{card['item']['url']}\n评分：{card.get('scores')}\n\n补充理由（可选）：\n"
+    )
+    base = f"https://github.com/{repo}/issues/new?title={title}&body={body}&labels="
+    return f"- **反馈**：[👍 值得做]({base}good) ・ [👎 不行]({base}bad)"
+
+
 # ---------------------------------------------------------------- 日报
 
 def render_report(cfg, top_cards, events, n_raw, n_filtered):
@@ -537,17 +614,22 @@ def render_report(cfg, top_cards, events, n_raw, n_filtered):
         else:
             meta = "句式命中" if it["line"] == "search" else "当日热帖"
         src = it["sub"] if it["source"] == "reddit" else it["source"]
+        n_seen, last_date = c.get("_recur", (1, None))
+        badge = f"　🔁 **第 {n_seen} 次出现**（上次 {last_date}）" if n_seen > 1 else ""
         L += [
             f"### {i}. {c['pain']}",
-            f"- **谁在痛**：{c['who']}　**窗口**：{c.get('window', '?')}",
+            f"- **谁在痛**：{c['who']}　**窗口**：{c.get('window', '?')}{badge}",
             f"- **证据**：r/{src}（{meta}）"
             f"：\"{ev}\" — [原帖]({it['url']})",
             f"- **现状**：{c.get('existing', '')}",
             f"- **可做**：{c['site_idea']}",
             f"- **评分**：可建 {s['buildable']}/5 · 变现 {s['monetize']}/5 · 空白 {s['gap']}/5"
             + (f" · 点评：{c['verdict']}" if c.get("verdict") else ""),
-            "",
         ]
+        fb = feedback_links(cfg, c, i)
+        if fb:
+            L.append(fb)
+        L.append("")
     if not top_cards:
         L.append("今天没有过筛的痛点（阈值可在 config.yaml 调低）。")
     return "\n".join(L)
@@ -633,7 +715,10 @@ def main():
 
     for c in top:  # 只把进入日报的标记为已见，落选的明天还有机会
         mark_seen(db, c["item"]["id"])
+        c["_keywords"] = pain_keywords(c)
+        c["_recur"] = check_recurrence(db, c)
     db.commit()
+    record_pains(db, top)
 
     report = render_report(cfg, top, upcoming_events(cfg), len(raw), len(filtered))
     (ROOT / "reports").mkdir(exist_ok=True)
