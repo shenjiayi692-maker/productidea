@@ -35,5 +35,17 @@ jobs:
           git config user.name "radar-bot"
           git config user.email "bot@users.noreply.github.com"
           git add needs-radar/data/seen.db needs-radar/reports/ || true
-          git diff --cached --quiet || git commit -m "chore: daily radar $(date -u +%F)"
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: daily radar $(date -u +%F)"
+          # 跑这 7 分钟里若有人推了代码，先并进来再推
+          for i in 1 2 3; do
+            git push && exit 0
+            git fetch origin main
+            # rebase 中 --theirs = 正在重放的本次运行提交，冲突时以它为准（含今天的抓取记录）
+            git rebase origin/main || {
+              git checkout --theirs needs-radar/data/seen.db
+              git add needs-radar/data/seen.db
+              GIT_EDITOR=true git rebase --continue
+            }
+          done
           git push
