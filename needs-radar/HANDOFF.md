@@ -1,57 +1,59 @@
 # HANDOFF：给 Claude Code 的交接文档
 
-## 项目背景（30 秒版）
+怎么跑、怎么部署、有哪些坑，看 [README.md](README.md)。产品定义看 [../PRD-需求雷达.md](../PRD-需求雷达.md)。
+**这份文档只管三件事：现在做到哪了、接下来做什么、什么不能动。**
 
-Jiayi 要一个「需求雷达」：每天自动扫描英文社区讨论和热点，用 LLM 提炼出**具体、真实、可以 1-3 天 vibecode 成小网站变现**的痛点，发中文日报到 shenjiayi692@gmail.com。完整产品定义见上级目录 `PRD-需求雷达.md`。
+## 进度（最后更新 2026-09-04）
 
-本目录（needs-radar）代码已写完并通过离线自测，但**未在真实网络环境端到端跑过**（编写环境沙箱无法连 Reddit/Anthropic/Resend）。你的任务是联网调试并部署。
+**已完成**
 
-## 架构
+- v0.1 全流程上线：抓取 → 粗筛 → LLM 两轮 → 中文日报 → Resend 邮件 → 结果回写仓库。
+  每天由 GitHub Actions 自动跑，已连续稳定运行。
+- Reddit 免账号抓取：匿名 `.json` 被封 403 后改走免登录 `top.rss` + Serper 搜 `site:reddit.com "句式"`。
+  抓取量从 70 条/天回到 250+ 条/天。配了 `REDDIT_CLIENT_ID/SECRET` 会自动切回官方 OAuth。
+- v0.2 第 1 项**自动竞品核查**：拿卡片的搜索词真去 Google 查首页，统计现成工具数/大站占位，
+  作为事实喂给评委轮定「空白分」。已验证能把凭印象的 4/5 拉到事实的 1/5。
+- v0.2 第 2 项**历史频率检查 + 反馈收集层**：`seen.db` 加 `pains` 表留档历次卡片，
+  日报标注「🔁 第 N 次出现」（已在实跑中出现第 2、3 次的案例）；每张卡带 👍/👎 预填 GitHub Issue 链接。
+- CI 修复：bot 回写前先 rebase 重试，避免与人工提交撞车导致当天日报丢失。
 
-```
-radar.py 单文件流水线：
-抓取(Reddit定向subreddit + Reddit关键词搜索 + HN + Google Trends RSS)
-→ 粗筛(互动阈值 + SQLite 去重, data/seen.db)
-→ Claude API 两轮(提炼痛点卡片 → 评分排序)
-→ 渲染中文 Markdown 日报(reports/YYYY-MM-DD.md)
-→ Resend 发邮件
-```
+**下一步**
 
-配置全在 `config.yaml`（9 个垂直领域 + 5 个搜索句式 + 阈值），周期性事件在 `events.yaml`。同目录 `../english-hot-api` 是独立的英文热榜 API 项目（Node），雷达不依赖它，不用管。
+- 攒够几十条 👍/👎 后，把标注过的卡片作为范例注入 extract/judge prompt（见下方待办说明）。
+- v0.2 第 3–5 项，按优先级排。
 
-## 你要做的事（按序）
+**残留状态**
 
-1. `pip install -r requirements.txt`，复制 `.env.example` 为 `.env` 填好两个 key（用户提供）。
-2. `python radar.py --selftest` —— 应打印样例日报并显示 OK。
-3. `python radar.py --no-llm` —— 真实抓取+粗筛。**预期问题**：
-   - Reddit 403/429：加长 `time.sleep`，或 UA 被封时换一个描述性 UA；仍不行则实现 OAuth（免费 script app，改 `get()` 走 `oauth.reddit.com` + token）。
-   - 某 subreddit 名字失效/私有化：从 config.yaml 移除即可，单源失败已有容错。
-4. `python radar.py --dry-run` —— 走完 LLM 两轮，检查 reports/ 下日报质量：
-   - 卡片少于 5 张 → 调低 config 阈值或检查 extract prompt 是否解析失败（看 stderr warn）。
-   - JSON 解析失败率高 → 在 `call_claude()` 里加重试或改用 tool-use 强制 JSON。
-5. `python radar.py` —— 真实发一封邮件确认收到（Resend 免费档 from 必须是 onboarding@resend.dev，除非用户验证了域名）。
-6. 部署：建私有 GitHub 仓库（整个 productidea 或单独 needs-radar 均可，workflow 里路径按 needs-radar/ 写的），推送后在 repo Settings → Secrets 配 `ANTHROPIC_API_KEY`、`RESEND_API_KEY`，手动 workflow_dispatch 跑一次验证。
+- **Reddit 凭据未配**，走 RSS/搜索路径。代价是这类条目没有赞数/评论数，粗筛跳过互动阈值。
+- **发件人仍是共享的 `onboarding@resend.dev`**，大概率进 Gmail 垃圾箱。
+  用户验证自有域名后改 `config.yaml` 的 `email.from` 即可。
+- **Serper 免费额度是一次性 2500 次**，当前约 25–33 次/天（句式搜索 5 + 竞品核查 20 左右）。
+  2026-07-24 起用，截至 2026-09-04 仍正常。见底后调低 `competitor_check.max_searches_per_day` 或换 key。
+- **反馈数据只收集、未使用**：👍/👎 落在私有仓库 issues，目前没有任何代码读取它。
+- `english-hot-api/` 与本项目无依赖，不用管。
 
 ## 已知设计决策（别改，除非用户要求）
 
 - 只有**进入日报的条目**才标记 seen，落选的次日可再进（信号可能变强）。
-- 搜索线（"is there a tool that" 等句式）阈值低且排序优先——信噪比最高的入口。
+- 搜索线（"is there a tool that" 等句式）阈值低且排序优先——信噪比最高的入口，
+  目前也是唯一能稳定产出生活类痛点的源（HN/Trends 基本是科技新闻和名人热搜）。
+- 无赞数的条目（RSS/搜索来源）跳过互动阈值：`top/day` 和句式命中本身就是质量门槛。
+  日报如实显示「当日热帖」「句式命中」，**不要伪造赞数**。
 - 日报中文、证据引用保留英文原文。
-- 成本控制：max_candidates=120，extract 分批 20 条/次，约 7 次调用/天。
+- 成本控制：max_candidates=120，extract 分批 20 条/次，约 7 次 LLM 调用/天。
 
-## v0.2 待办清单（v0.1 稳定跑两周后再做，按优先级排序）
+## 待办清单（按优先级）
 
-1. ✅（2026-07-14 已实现并激活，用 SerpAPI 免费档；支持 SERPER_API_KEY/SERPAPI_API_KEY 二选一）**自动竞品核查（最优先）**：评委轮之前，对每张卡片的 site_idea 生成 2-3 个英文搜索词，
-   调搜索 API（Brave Search API 免费 2000 次/月，或 SerpAPI）查首页结果，统计：
-   现成工具数量、是否有大站/官方工具占位、是否全是内容页而无工具页（=空白信号）。
-   把结果作为事实依据喂给评委轮，替代 LLM 凭印象打的 gap 分。
-2. **历史频率检查**：seen.db 加一张 pains 表存历次卡片的 pain 向量或关键词；
-   新卡片入库时比对过去 30/90 天的相似记录，日报标注「该痛点第 N 次出现」。
-   反复出现 = 慢性痛（常青工具），单次爆发 = 事件性（要抢窗口）。
-3. **机会打分升级**：Google Trends 关键词搜索量趋势拉进评分。
-4. **一键生成 vibecoding prompt**：对日报 Top 3 自动附一段可直接喂给 AI 编程工具的
+1. ✅ **自动竞品核查**（2026-07-14 完成）
+2. ✅ **历史频率检查 + 反馈收集层**（2026-07-29 完成）
+3. **反馈闭环接上**：把 👍/👎 标注过的卡片作为正负范例注入 prompt（「这类他打勾、这类他打叉」），
+   每天自动从库里拉最新标注生成。前提是攒够十几条正负样本。
+   注意预期：这个量级只够做范例注入，达到的效果是「不再反复推明确说过不喜欢的类型」，
+   **不是**训练出能猜偏好的推荐模型。
+4. **机会打分升级**：Google Trends 关键词搜索量趋势拉进评分。
+5. **一键生成 vibecoding prompt**：对日报 Top 3 自动附一段可直接喂给 AI 编程工具的
    MVP 需求描述（功能边界、页面结构、SEO 关键词、变现位）。
-5. **App Store / Chrome 商店差评挖掘**：新信号源，差评 = 已验证付费市场的未满足需求。
+6. **App Store / Chrome 商店差评挖掘**：新信号源，差评 = 已验证付费市场的未满足需求。
 
 ## 用户偏好
 

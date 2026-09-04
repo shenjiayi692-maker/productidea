@@ -7,7 +7,7 @@
 | 路由 | 来源 | 参数 | 鉴权 |
 |---|---|---|---|
 | `/hackernews` | HN Algolia API | `type=front_page\|ask_hn\|show_hn`，`limit` | 无 |
-| `/reddit` | Reddit 公开 JSON | `sub`（默认 all，支持 `a+b` 多版块），`sort=hot\|top\|rising\|new`，`limit` | 无 |
+| `/reddit` | Reddit RSS（匿名）／官方 OAuth（配了凭据时） | `sub`（默认 all，支持 `a+b` 多版块），`sort=hot\|top\|rising\|new`，`t`（sort=top 时的时间范围），`limit` | 可选 |
 | `/github` | GitHub Trending 页面解析 | `since=daily\|weekly\|monthly`，`lang` | 无 |
 | `/google-trends` | Google Trends 每日热搜 RSS | `geo`（默认 US） | 无 |
 | `/all` | 以上四源并行聚合（单源失败不影响整体） | 透传以上参数 | 无 |
@@ -38,16 +38,25 @@ npm start          # http://localhost:6689
 
 ## 已知限制与注意事项
 
-1. **Reddit 反爬**：公开 `.json` 接口必须带自定义 User-Agent（已内置）。个人 IP 下稳定；**Vercel 等数据中心 IP 可能被 403**。若遇到，改用 Reddit 官方 OAuth（免费注册 script app，100 QPM 额度），把 `reddit.js` 的请求换成 `oauth.reddit.com` + token 即可。
+1. **Reddit 匿名 `.json` 接口已于 2026-07 全面失效**（一律 403，换 User-Agent 无效，与 IP 无关）。
+   现默认走免登录的 `.rss`，**代价是拿不到赞数和评论数**——返回项里 `hot` 恒为 0、`extra.comments` 为 null，
+   并以 `extra.scored: false` 标记，调用方不要拿 `hot` 给这些条目排序。
+   想要完整数据就配 `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`（reddit.com/prefs/apps 免费 script app），
+   代码会自动改走 `oauth.reddit.com`，返回项 `params.via` 会从 `rss` 变成 `oauth`。
+   另注意 RSS 突发限流较严，已内置 5/10/20 秒退避重试，配合 10 分钟缓存足够日常使用。
 2. **GitHub Trending 是页面解析**：GitHub 改版会导致解析失效，属正常维护成本（DailyHotApi 的各源也一样）。
 3. **Google Trends RSS** 每个地区约 10~20 条，只有当日热搜，无历史数据。
 4. 缓存为进程内存，10 分钟 TTL。Vercel serverless 冷启动后缓存清空——够用；要持久缓存可加 Upstash Redis。
 5. 抓取行为请遵守各平台 robots/ToS；本项目仅供个人研究聚合使用，产品化前需评估各源商用条款（尤其 Reddit）。
 
-## 用作「需求雷达」的数据层
+## 与需求雷达的关系
 
-需求雷达（见 PRD）每日 cron 直接请求 `/all`，再对 Reddit/HN 的条目跑 LLM 痛点提炼。推荐订阅的 subreddit 通过 `sub` 参数传入，如：
+**没有依赖关系。** 曾设想让需求雷达调本 API 的 `/all` 取数，最终没有这么做——
+[../needs-radar](../needs-radar) 自己直连抓取，两个项目互不影响。原因见[根 README](../README.md)：
+两者形态不同（一个是 HTTP 服务、一个是批处理管道），共用抓取层会给每天在跑的雷达引入新的失败点。
+
+本项目当前处于休眠状态，作为独立的热榜 API 保留。真要拿它当数据层时这样用：
 
 ```
-/reddit?sub=SideProject+Entrepreneur+smallbusiness&sort=top&limit=50
+/reddit?sub=SideProject+Entrepreneur+smallbusiness&sort=top&t=day&limit=50
 ```
