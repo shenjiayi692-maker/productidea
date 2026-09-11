@@ -1,45 +1,70 @@
-# productidea
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="Needs Radar scans public discussions, verifies competition, and emails a daily shortlist of buildable product pains">
+</p>
 
-找产品点子的工作区。核心是 **needs-radar**——每天自动扫英文社区、用 LLM 提炼可 vibecode 变现的痛点、发中文日报到邮箱。
+**Productidea** is the workspace around [Needs Radar](./needs-radar/): a scheduled research pipeline that scans English-language communities for concrete pain points, checks whether competing tools already occupy the search results, and emails a concise Chinese-language opportunity report.
 
-## 目录里有什么
+It is not a dashboard or a SaaS app. Its interface is the daily email; GitHub Actions is the runtime.
 
-| | 是什么 | 状态 |
-|---|---|---|
-| [needs-radar/](needs-radar/) | 需求雷达。GitHub Actions 定时脚本，每天抓 Reddit/HN/Google Trends → LLM 提炼痛点 → 真实搜索核查竞品 → 中文日报邮件 | ✅ **在跑**，每天自动出报 |
-| [PRD-需求雷达.md](PRD-需求雷达.md) | needs-radar 的原始产品定义（做给谁、解决什么、为什么这么设计） | 📌 冻结，作为设计依据保留 |
-| [english-hot-api/](english-hot-api/) | 英文热榜聚合 API（Node + Hono + Vercel），对标 DailyHotApi，四个源各一个路由 | ⏸ **休眠**，见下方说明 |
+## Today’s signal, in five minutes
 
-## 三者的关系
+The live pipeline currently:
 
-**PRD → needs-radar** 是同一件事的两个阶段：PRD 是当初的产品定义，needs-radar 是它的实现。PRD 不再更新，只在需要回溯"当初为什么这么设计"时看。
+1. Collects targeted Reddit RSS, phrase-based Reddit search, Hacker News, Google Trends, and a hand-maintained event calendar.
+2. Applies recency, engagement, and SQLite deduplication rules.
+3. Uses an LLM to extract a specific pain, audience, evidence, and small product shape.
+4. Searches the suggested keywords to count real competitors.
+5. Scores buildability, monetization, and market gap using those search results.
+6. Marks recurring pain found within 90 days.
+7. Writes [`reports/YYYY-MM-DD.md`](./needs-radar/reports/) and sends the same shortlist by email.
 
-**english-hot-api 与 needs-radar 无依赖关系**，是两个独立项目。两者确实都抓 HN / Reddit / Google Trends，但形态完全不同——一个是给外部调用的 HTTP API，一个是自己跑完就发邮件的批处理管道。
+The competition check is the core guardrail. A plausible idea can look empty to an LLM while the first search page already contains many dedicated tools and official calculators; Needs Radar makes that evidence visible before assigning a gap score.
 
-**目前不建议把两者的抓取层合并**，原因是它们已经实质性分叉：Reddit 在 2026 年 7 月封掉了匿名 `.json` 接口（现在一律 403）。needs-radar 已改走免登录 RSS + 搜索 API 绕过，而 english-hot-api 的 `/reddit` 路由仍在调那个死接口，**该路由目前是坏的**。合并意味着要么让雷达迁就一个用不了的实现，要么先把 API 修好——共用代码的收益并不存在，反而给每天在跑的雷达引入一个新的失败点。
-
-english-hot-api 自 2026-07-14 导入后未再改动。要么哪天有实际用途时修好 `/reddit` 路由（照搬 radar.py 的 RSS 方案即可），要么就当作归档项目留着。
-
-## 文档分工
-
-needs-radar 有三份文档，各管一段，别混：
-
-- **[README](needs-radar/README.md)**：是什么、怎么跑、怎么部署、有哪些坑 —— 日常查这份
-- **[HANDOFF](needs-radar/HANDOFF.md)**：进度、v0.2 待办清单、不能改的设计决策 —— 续跑前先读这份
-- **[PRD](PRD-需求雷达.md)**：产品定义 —— 只在追溯设计意图时看
-
-## 快速上手
+## Run the offline self-test
 
 ```bash
-cd needs-radar && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cd needs-radar
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python radar.py --selftest
 ```
+
+This exercises the rendering path without network access, API spend, email, or changes to the tracked seen database.
+
+For live modes, copy [`.env.example`](./needs-radar/.env.example) and read the complete [Needs Radar guide](./needs-radar/README.md):
 
 ```bash
-cd needs-radar && .venv/bin/python radar.py --selftest
+.venv/bin/python radar.py --no-llm   # collect and prefilter only
+.venv/bin/python radar.py --dry-run  # full analysis, write report, do not email
+.venv/bin/python radar.py            # full scheduled behavior
 ```
 
-不联网、不花钱，打印一份样例日报即为正常。真跑起来要先填 `.env`，详见 [needs-radar/README.md](needs-radar/README.md)。
+## Workspace map
 
-## 自动化
+| Path | Purpose | Status |
+| --- | --- | --- |
+| [`needs-radar/`](./needs-radar/) | Python batch pipeline, configuration, database, and daily reports | Active; scheduled daily |
+| [`PRD-需求雷达.md`](./PRD-需求雷达.md) | Frozen original product definition and rationale | Reference |
+| [`english-hot-api/`](./english-hot-api/) | Separate Hono / Vercel news aggregation experiment | Dormant |
 
-`.github/workflows/daily.yml`（在仓库根目录，Actions 只认这里）每天定时跑 needs-radar，跑完把当天日报和去重库提交回 main。**本地开发前先 `git pull --rebase`。**
+`english-hot-api` is not a dependency of Needs Radar. Its anonymous Reddit JSON route is currently broken because that endpoint returns 403; the active radar uses RSS and search APIs instead. The implementations should remain separate unless the dormant API is deliberately revived.
+
+## Configuration and cost controls
+
+[`needs-radar/config.yaml`](./needs-radar/config.yaml) defines sources, thresholds, model batch size, report length, email settings, and maximum daily search count. [`events.yaml`](./needs-radar/events.yaml) records predictable windows such as application, tax, and shopping seasons.
+
+Live operation needs Anthropic and Resend keys. Serper is recommended for phrase search and competitor checks, with SerpAPI as a fallback. Reddit OAuth is optional.
+
+The current configuration uses roughly seven model calls, up to about 45 search calls, one email, and around eight GitHub Actions minutes per day. Those are observed operating figures, not a service guarantee.
+
+## Automation note
+
+[`.github/workflows/daily.yml`](./.github/workflows/daily.yml) runs at 06:00 UTC and commits the new report plus deduplication database back to `main`. Scheduled GitHub jobs may start later than their nominal time.
+
+Because the bot changes `main` every day, pull with rebase before local development:
+
+```bash
+git pull --rebase
+```
+
+See [`needs-radar/HANDOFF.md`](./needs-radar/HANDOFF.md) for operational decisions and known limitations.

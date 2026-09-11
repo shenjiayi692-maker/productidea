@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Needs Radar</title>
+  <desc id="desc">A radar sweep finds discussion signals, passes them through competition checks, and delivers a short daily opportunity report.</desc>
+  <rect width="1200" height="420" rx="24" fill="#101914"/>
+  <g transform="translate(777 210)">
+    <circle r="164" fill="#14251b" stroke="#2d5139" stroke-width="2"/><circle r="117" fill="none" stroke="#2d5139"/><circle r="70" fill="none" stroke="#2d5139"/>
+    <path d="M-164 0 H164 M0 -164 V164" stroke="#2d5139"/>
+    <path d="M0 0 L135 -92 A164 164 0 0 1 164 0Z" fill="#50d890" opacity=".16"/>
+    <path d="M0 0 L135 -92" stroke="#50d890" stroke-width="4"/>
+    <circle cx="109" cy="-62" r="9" fill="#ffb45c"/><circle cx="52" cy="-29" r="6" fill="#50d890"/><circle cx="-82" cy="72" r="7" fill="#ffb45c"/>
+  </g>
+  <g transform="translate(936 55)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <rect width="210" height="305" rx="12" fill="#f5f0e4"/>
+    <text x="18" y="30" fill="#203126" font-size="14" font-weight="700">DAILY / 2026-09-11</text>
+    <text x="18" y="64" fill="#203126" font-size="19" font-weight="800">10 pains worth</text><text x="18" y="88" fill="#203126" font-size="19" font-weight="800">a closer look</text>
+    <g fill="#d9d1c2"><rect x="18" y="113" width="174" height="7" rx="3"/><rect x="18" y="132" width="138" height="7" rx="3"/><rect x="18" y="172" width="174" height="7" rx="3"/><rect x="18" y="191" width="151" height="7" rx="3"/><rect x="18" y="231" width="174" height="7" rx="3"/><rect x="18" y="250" width="124" height="7" rx="3"/></g>
+    <g font-size="13" font-weight="700"><text x="18" y="158" fill="#cc7043">GAP 5 / 5</text><text x="18" y="217" fill="#4c8f66">VERIFIED SEARCH</text><text x="18" y="276" fill="#cc7043">RECURRING PAIN</text></g>
+  </g>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <text x="62" y="74" fill="#ffb45c" font-size="18" font-weight="800" letter-spacing="3">AUTOMATED PRODUCT RESEARCH</text>
+    <text x="62" y="152" fill="#f5f0e4" font-size="70" font-weight="820">Needs Radar</text>
+    <text x="62" y="202" fill="#b7c7bb" font-size="24">Find the pain. Check the market. Read one email.</text>
+    <g transform="translate(62 258)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16">
+      <text fill="#50d890">01 SCAN</text><path d="M80 -5 H128" stroke="#53695a"/><text x="141" fill="#50d890">02 EXTRACT</text><path d="M247 -5 H295" stroke="#53695a"/><text x="308" fill="#ffb45c">03 VERIFY</text>
+      <text y="55" fill="#87998c">Reddit · Hacker News · Trends · seasonal events</text>
+      <text y="94" fill="#87998c">Python · SQLite · GitHub Actions · daily reports</text>
+    </g>
+  </g>
+</svg>
