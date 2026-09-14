@@ -2,6 +2,8 @@
   <img src="./assets/readme/hero.svg" width="100%" alt="Needs Radar scans public discussions, verifies competition, and emails a daily shortlist of buildable product pains">
 </p>
 
+<p align="center"><strong>English</strong> · <a href="./README.zh-CN.md">中文</a></p>
+
 **Productidea** is the workspace around [Needs Radar](./needs-radar/): a scheduled research pipeline that scans English-language communities for concrete pain points, checks whether competing tools already occupy the search results, and emails a concise Chinese-language opportunity report.
 
 It is not a dashboard or a SaaS app. Its interface is the daily email; GitHub Actions is the runtime.
