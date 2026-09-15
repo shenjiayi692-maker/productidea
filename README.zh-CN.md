@@ -4,6 +4,14 @@
 
 <p align="center"><a href="./README.md">English</a> · <strong>中文</strong></p>
 
+每个产品点子在你真去搜之前，听起来都像没人做过。**Needs Radar** 在公开讨论里找出具体痛点，数清已经占着搜索结果的竞品，然后每天把清单发到你邮箱。
+
+```bash
+git clone https://github.com/shenjiayi692-maker/productidea && cd productidea/needs-radar && python3 -m venv .venv && .venv/bin/pip install -qr requirements.txt && .venv/bin/python radar.py --selftest
+```
+
+这跑的是离线自检：不联网、不花 API 钱、不发邮件。它会打印一份样例日报，让你在配置任何东西之前先看到产出长什么样。
+
 **Productidea** 是围绕 [Needs Radar](./needs-radar/) 的工作区：一条定时研究流水线，扫描英文社区寻找具体的痛点，核查竞品是否已经占满搜索结果，然后把一份简明的中文机会日报发到邮箱。
 
 它不是 dashboard，也不是 SaaS 应用。它的界面就是那封每日邮件，运行时是 GitHub Actions。

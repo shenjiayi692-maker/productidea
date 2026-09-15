@@ -4,6 +4,14 @@
 
 <p align="center"><strong>English</strong> · <a href="./README.zh-CN.md">中文</a></p>
 
+Every product idea sounds unclaimed until you actually search for it. **Needs Radar** finds concrete pains in public discussions, counts the competitors already ranking for them, and emails you the shortlist daily.
+
+```bash
+git clone https://github.com/shenjiayi692-maker/productidea && cd productidea/needs-radar && python3 -m venv .venv && .venv/bin/pip install -qr requirements.txt && .venv/bin/python radar.py --selftest
+```
+
+That runs the offline self-test: no network, no API spend, no email. It prints a sample report so you can see the output shape before configuring anything.
+
 **Productidea** is the workspace around [Needs Radar](./needs-radar/): a scheduled research pipeline that scans English-language communities for concrete pain points, checks whether competing tools already occupy the search results, and emails a concise Chinese-language opportunity report.
 
 It is not a dashboard or a SaaS app. Its interface is the daily email; GitHub Actions is the runtime.
