@@ -78,3 +78,7 @@ git pull --rebase
 ```
 
 运行层面的决策和已知限制见 [`needs-radar/HANDOFF.md`](./needs-radar/HANDOFF.md)。
+
+## 许可
+
+MIT,见 [LICENSE](./LICENSE)。

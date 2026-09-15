@@ -78,3 +78,7 @@ git pull --rebase
 ```
 
 See [`needs-radar/HANDOFF.md`](./needs-radar/HANDOFF.md) for operational decisions and known limitations.
+
+## License
+
+MIT—see [LICENSE](./LICENSE).
